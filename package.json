@@ -1,14 +1,16 @@
 {
-  "name": "import-markdown",
+  "name": "import-notion-markdown",
   "main": "./lib/index",
   "version": "0.2.0",
-  "description": "A plugin for importing notes from Markdown files",
-  "keywords": [],
+  "description": "A plugin for importing notes from Markdown files exported by Notion.so",
+  "keywords": [
+  	"inkdrop"
+  ],
   "scripts": {
     "build": "babel src/ -d lib/",
     "dev": "babel --watch src/ -d lib/"
   },
-  "repository": "https://github.com/q1701/inkdrop-import-markdown",
+  "repository": "https://github.com/saibotsivad/inkdrop-import-notion-markdown",
   "license": "MIT",
   "engines": {
     "inkdrop": "^4.x"

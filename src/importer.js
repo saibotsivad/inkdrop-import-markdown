@@ -6,6 +6,12 @@ import Cutter from 'utf8-binary-cutter'
 const { dialog } = remote
 const { Note } = models
 
+const completedStatuses = [ 'Completed', 'Archived' ]
+function parseDateString(date) {
+  const d = new Date(date)
+  return d.getTime()
+}
+
 export function openImportDialog() {
   return dialog.showOpenDialog({
     title: 'Open Markdown file',
@@ -28,33 +34,57 @@ export async function importMarkdownFromMultipleFiles (files, destBookId) {
   }
 }
 
-/*
- wri.pe: https://wri.pe/
- If the file was exported from 'wri.pe',
- the first line should be truncated from its body
- and be treated as a title.
- */
-function isWripeFormat (fn) {
-  return /page-\d+\.txt/.test(path.basename(fn))
-}
+function parseMarkdown(markdown) {
+  const [ firstLine, metadataString, ...restLines ] = markdown.trim().split('\n\n')
 
-function getTitleAndBodyFromMarkdown (fn, markDown) {
-  const [firstLine, ...restLines] = markDown.split('\n')
-  const title = Cutter.truncateToBinarySize(firstLine.replace(/^#+\s*/, ''), 128)
-  if (isWripeFormat(fn)) {
-    return {title: title, body: restLines.join('\n')}
-  } else {
-    return {title: title, body: markDown}
-  }
-}
+  const metadata = metadataString
+    .split('\n')
+    .map(line => {
+      const [ key, ...value ] = line.split(':')
+      return {
+        key: key.trim(),
+        value: value.join(':').trim()
+      }
+    })
+    .reduce((map, { key, value }) => {
+      map[key] = value
+      return map
+    }, {})
 
-function getMetaFromMarkdown (body) {
-  const meta = {
-    tags: [],
-    createdAt: Date.now(),
+  const tags = []
+  Object
+    .keys(metadata)
+    .forEach(key => {
+      if (key === 'Tags') {
+        tags.push(...metadata[key].split(',').map(s => s.trim()))
+      }
+    })
+
+  const status = completedStatuses.includes(metadata.Status)
+    ? 'completed'
+    : (
+      metadata.Status === 'In Progress'
+        ? 'active'
+        : undefined
+    )
+
+  const createdAt = metadata['Created Date']
+    ? parseDateString(metadata['Created Date'])
+    : Date.now()
+
+  const note = {
+    title: firstLine.replace(/^# /, ''),
+    body: restLines.join('\n\n'),
+    tags,
+    createdAt,
     updatedAt: Date.now()
   }
-  return meta
+
+  if (status) {
+    note.status = status
+  }
+
+  return note
 }
 
 export async function importMarkdownFromFile (fn, destBookId) {
@@ -62,9 +92,7 @@ export async function importMarkdownFromFile (fn, destBookId) {
     throw new Error('Destination notebook ID is not specified.')
   }
   const markDown = fs.readFileSync(fn, 'utf-8')
-  const {title, body} = getTitleAndBodyFromMarkdown(fn, markDown)
-  const {tags, createdAt, updatedAt} = getMetaFromMarkdown(body)
-  const note = new Note({title: title, body, tags, createdAt, updatedAt})
+  const note = new Note(parseMarkdown(markDown))
   note.bookId = destBookId
   await note.save()
 }
